@@ -1,0 +1,35 @@
+.ct-wrap { overflow-x: auto; }
+
+.ct-meta { font-size: 12px; color: #9ca3af; margin-bottom: 12px; }
+
+.ct {
+  width: 100%; border-collapse: collapse;
+  background: #fff; border-radius: 10px;
+  overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+
+.ct thead tr { background: #f9fafb; }
+.ct th {
+  padding: 10px 14px; font-size: 12px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.04em;
+  color: #6b7280; text-align: left; border-bottom: 1px solid #e5e7eb;
+}
+.ct th.c { text-align: center; }
+
+.ct td {
+  padding: 12px 14px; border-bottom: 1px solid #f3f4f6;
+  vertical-align: middle;
+}
+.ct tbody tr:last-child td { border-bottom: none; }
+.ct tbody tr:hover { background: #fafafa; }
+
+.ct td.c { text-align: center; }
+.ct td.hotel { font-weight: 500; }
+
+.ct td.price { font-variant-numeric: tabular-nums; }
+.ct td.price.best { color: #059669; font-weight: 600; }
+.ct td.price-min { color: #7c3aed; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.no-price { color: #d1d5db; }
+
+.empty { color: #9ca3af; font-size: 14px; padding: 24px 0; }

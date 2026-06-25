@@ -1,0 +1,275 @@
+.sp-wrap {
+  padding: 24px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.sp-form {
+  background: #f8f9fa;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.sp-form-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: flex-end;
+}
+
+.sp-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: #555;
+}
+
+.sp-form label span {
+  font-weight: 500;
+}
+
+.sp-form input,
+.sp-form select {
+  padding: 7px 10px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  font-size: 14px;
+  background: #fff;
+  min-width: 120px;
+}
+
+.sp-search-btn {
+  padding: 8px 24px;
+  background: #2563eb;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  height: 36px;
+  align-self: flex-end;
+}
+
+.sp-search-btn:disabled {
+  background: #93b4f0;
+  cursor: not-allowed;
+}
+
+.sp-export-btn {
+  padding: 8px 18px;
+  background: #16a34a;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  height: 36px;
+  align-self: flex-end;
+}
+
+.sp-status {
+  text-align: center;
+  padding: 32px;
+  color: #666;
+  font-size: 15px;
+}
+
+.sp-error {
+  background: #fee2e2;
+  color: #b91c1c;
+  padding: 12px 16px;
+  border-radius: 6px;
+  margin-bottom: 16px;
+}
+
+.sp-meta {
+  font-size: 13px;
+  color: #888;
+  margin-bottom: 8px;
+}
+
+.sp-table-wrap {
+  overflow-x: auto;
+}
+
+.sp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.sp-table th {
+  background: #1e3a5f;
+  color: #fff;
+  padding: 8px 10px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.sp-table th.op-header {
+  background: #2563eb;
+}
+
+.sp-table th.subh {
+  background: #3b82f6;
+  font-weight: 400;
+  font-size: 12px;
+}
+
+.sp-table th.diff-h {
+  background: #818cf8;
+}
+
+.sp-table td {
+  padding: 7px 10px;
+  border-bottom: 1px solid #e5e7eb;
+  vertical-align: middle;
+}
+
+.sp-table tbody tr:hover {
+  background: #f0f7ff;
+}
+
+.hotel-cell {
+  font-weight: 500;
+  max-width: 220px;
+}
+
+.date-cell {
+  white-space: nowrap;
+  color: #555;
+}
+
+.price-cell {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.diff-cell {
+  text-align: right;
+  font-size: 13px;
+  background: #f0f4ff;
+  color: #374151;
+}
+
+.diff-pos {
+  color: #b45309;
+}
+
+.c {
+  text-align: center;
+}
+.sp-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  background: #f0f7ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+}
+
+.sp-filters input,
+.sp-filters select {
+  padding: 6px 10px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  font-size: 13px;
+  background: #fff;
+  min-width: 160px;
+}
+
+.sp-clear-btn {
+  padding: 6px 14px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 5px;
+  font-size: 13px;
+  cursor: pointer;
+  color: #666;
+}
+
+.sp-clear-btn:hover {
+  background: #fee2e2;
+  color: #b91c1c;
+  border-color: #fca5a5;
+}
+.sp-filter-ops {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 4px 8px;
+  background: #f5f5f5;
+  border-radius: 6px;
+}
+
+.sp-filter-ops-label {
+  font-size: 13px;
+  color: #666;
+  white-space: nowrap;
+}
+
+.sp-op-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.sp-op-toggle input[type="checkbox"] {
+  cursor: pointer;
+  width: 14px;
+  height: 14px;
+}
+.sp-operators-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding-top: 4px;
+}
+
+.sp-filter-ops-label {
+  font-size: 13px;
+  color: #666;
+  white-space: nowrap;
+}
+
+.sp-op-toggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.sp-op-toggle input[type="checkbox"] {
+  cursor: pointer;
+  width: 14px;
+  height: 14px;
+  accent-color: #3b4fa8;
+}
+.sp-export-xlsx {
+  background: #16803c;
+}
+
+.sp-export-xlsx:hover {
+  background: #15803d;
+}
