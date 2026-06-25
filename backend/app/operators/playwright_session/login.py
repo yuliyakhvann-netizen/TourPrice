@@ -56,9 +56,13 @@ LOGIN_POST_URL = "https://kz.pegast.asia/Account/Login"
 # (confirmed via raw httpx GET — Playwright's page.content() apparently
 # renders the decoded <input> tag instead, which is why earlier patterns
 # based on that output didn't match the real server response.)
+# Два варианта — entity-encoded (локально) и decoded (Railway/продакшен)
 TOKEN_PATTERN = re.compile(
     r'RequestVerificationToken&quot;\s+type=&quot;hidden&quot;\s+'
     r'value=&quot;([^&]+)&quot;'
+)
+TOKEN_PATTERN_DECODED = re.compile(
+    r'RequestVerificationToken["\s]+[^>]*value=["\']([^"\']+)["\']'
 )
 
 
@@ -84,6 +88,8 @@ async def fetch_pegas_session_cookies(username: str, password: str) -> list[dict
         page_response.raise_for_status()
 
         token_match = TOKEN_PATTERN.search(page_response.text)
+        if token_match is None:
+            token_match = TOKEN_PATTERN_DECODED.search(page_response.text)
         if token_match is None:
             raise PegasLoginError(
                 "Could not find RequestVerificationToken in the login page HTML — "
