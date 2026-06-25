@@ -56,5 +56,11 @@ class SelfieOperator:
             filter_value=selfie_config.FILTER_DEFAULT,
             partition_price=selfie_config.PARTITION_PRICE_DEFAULT,
         )
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(follow_redirects=True) as client:
+            # Selfie требует куку сессии — получаем через инит-запрос
+            await client.get(
+                f"{self.base_url}/search_tour",
+                params={"TOWNFROMINC": selfie_config.TOWN_FROM_ALMATY},
+                timeout=httpx.Timeout(15.0, connect=5.0),
+            )
             return await fetch_all_prices(client, self.base_url, params)
