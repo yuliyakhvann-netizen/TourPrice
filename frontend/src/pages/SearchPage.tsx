@@ -16,12 +16,13 @@ const OPERATOR_LABELS: Record<string, string> = {
 
 function fmt(val: number | null) {
   if (val === null) return '—'
-  return val.toLocaleString('ru-RU')
+  return Math.round(val).toLocaleString('ru-RU')
 }
 
 function fmtDiff(val: number | null) {
   if (val === null) return '—'
-  return val.toLocaleString('ru-RU')
+  const rounded = Math.round(val)
+  return rounded.toLocaleString('ru-RU')
 }
 
 function todayStr() {
