@@ -319,6 +319,32 @@ async def get_confirmed_departure_cities(db: AsyncSession = Depends(get_db)):
     return sorted(names)
 
 
+@router.post("/selfie/discover-resorts")
+async def trigger_selfie_resort_discovery(
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+):
+    """Запускает фоновый сбор курортов по всем странам Selfie."""
+    from app.database import AsyncSessionLocal
+    from app.operators.selfie.catalog_importer import discover_selfie_resorts
+
+    result = await db.execute(select(Operator).where(Operator.code == "selfie"))
+    selfie_op = result.scalar_one_or_none()
+    if selfie_op is None:
+        raise HTTPException(status_code=404, detail="Operator 'selfie' not found in DB")
+
+    op_id = selfie_op.id
+
+    async def run_discovery():
+        async with AsyncSessionLocal() as bg_db:
+            totals = await discover_selfie_resorts(bg_db, operator_id=op_id)
+            total = sum(totals.values())
+            print(f"[selfie_discover] COMPLETE: {total} resorts total", flush=True)
+
+    background_tasks.add_task(run_discovery)
+    return {"status": "started", "message": "Сбор курортов Selfie запущен в фоне, следите за логами"}
+
+
 @router.post("/kazunion/discover-resorts")
 async def trigger_kazunion_resort_discovery(
     background_tasks: BackgroundTasks,
