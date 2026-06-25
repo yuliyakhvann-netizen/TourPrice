@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://RAILWAY_URL/api/:path*"
+      "destination": "https://tourprice-production.up.railway.app/api/:path*"
     },
     {
       "source": "/(.*)",
