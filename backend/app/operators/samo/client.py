@@ -22,7 +22,7 @@ DEFAULT_TIMEOUT = httpx.Timeout(60.0, connect=10.0)
 # Defensive cap so a pagination/parsing bug can't spin forever against a
 # live cabinet. Should never actually trigger - real Kompas searches seen
 # so far topped out at 7 pages.
-MAX_PAGES_SAFETY_CAP = 5
+MAX_PAGES_SAFETY_CAP = 30
 
 
 @dataclass
