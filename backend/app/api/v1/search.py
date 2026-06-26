@@ -409,7 +409,7 @@ async def _run_operator_search(
 
     # Проверяем свежие данные в normalized_tours (не старше 1 часа)
     from datetime import timedelta
-    cache_cutoff = datetime.now(timezone.utc) - timedelta(hours=1)
+    cache_cutoff = datetime.now(timezone.utc) - timedelta(hours=3)
     fresh_run = await db.execute(
         select(NormalizedTour.scrape_run_id)
         .where(
