@@ -188,9 +188,10 @@ class CountryMappingRepository(BaseRepository[CountryMapping]):
         stmt = select(CountryMapping).where(
             CountryMapping.operator_id == operator_id,
             CountryMapping.normalized_value == normalized_value,
-        )
+            CountryMapping.confirmed == True,  # noqa
+        ).limit(1)
         result = await self.session.execute(stmt)
-        mapping = result.scalar_one_or_none()
+        mapping = result.scalars().first()
         return mapping.raw_value if mapping else None
 
     async def confirm(self, id: int, normalized_value: str) -> CountryMapping | None:
