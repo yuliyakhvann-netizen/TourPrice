@@ -152,31 +152,40 @@ async def run_refresh() -> None:
     logger.info("[scheduler] refresh: %d countries", len(countries))
 
     today = dt.date.today()
-    checkin_beg = today + dt.timedelta(days=1)
-    checkin_end = today + dt.timedelta(days=60)
+
+    # Разбиваем на месячные окна — операторы не отдают данные за 6 месяцев сразу
+    monthly_windows = []
+    for month_offset in range(6):
+        window_beg = today + dt.timedelta(days=1) if month_offset == 0 else (
+            today.replace(day=1) + dt.timedelta(days=32 * month_offset)
+        ).replace(day=1)
+        next_month = (window_beg.replace(day=1) + dt.timedelta(days=32)).replace(day=1)
+        window_end = next_month - dt.timedelta(days=1)
+        monthly_windows.append((window_beg, window_end))
 
     for country in countries:
-        await asyncio.sleep(3)
-        try:
-            from app.api.v1.search import _run_country_refresh
-            await asyncio.wait_for(
-                _run_country_refresh(
-                    country=country,
-                    departure_city=DEPARTURE_CITY,
-                    checkin_beg=checkin_beg,
-                    checkin_end=checkin_end,
-                    nights_from=7,
-                    nights_till=14,
-                    adults=ADULTS,
-                    child_age=CHILD_AGE,
-                ),
-                timeout=300,  # 5 минут на страну максимум
-            )
-            logger.info("[scheduler] refresh: %s done", country)
-        except asyncio.TimeoutError:
-            logger.error("[scheduler] refresh: %s TIMED OUT after 5 min, skipping", country)
-        except Exception as e:
-            logger.error("[scheduler] refresh: %s FAILED: %s", country, e)
+        for window_beg, window_end in monthly_windows:
+            await asyncio.sleep(2)
+            try:
+                from app.api.v1.search import _run_country_refresh
+                await asyncio.wait_for(
+                    _run_country_refresh(
+                        country=country,
+                        departure_city=DEPARTURE_CITY,
+                        checkin_beg=window_beg,
+                        checkin_end=window_end,
+                        nights_from=7,
+                        nights_till=14,
+                        adults=ADULTS,
+                        child_age=CHILD_AGE,
+                    ),
+                    timeout=600,  # 10 минут на месяц
+                )
+                logger.info("[scheduler] refresh: %s %s..%s done", country, window_beg, window_end)
+            except asyncio.TimeoutError:
+                logger.error("[scheduler] refresh: %s %s TIMED OUT", country, window_beg)
+            except Exception as e:
+                logger.error("[scheduler] refresh: %s %s FAILED: %s", country, window_beg, e)
 
     logger.info("[scheduler] refresh job complete")
 
