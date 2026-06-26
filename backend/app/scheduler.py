@@ -179,7 +179,7 @@ async def run_refresh() -> None:
                         adults=ADULTS,
                         child_age=CHILD_AGE,
                     ),
-                    timeout=180,  # 3 минуты на месяц
+                    timeout=300,  # 5 минут на месяц
                 )
                 logger.info("[scheduler] refresh: %s %s..%s done", country, window_beg, window_end)
             except asyncio.TimeoutError:
