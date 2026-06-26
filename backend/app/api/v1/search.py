@@ -428,6 +428,12 @@ async def _run_operator_search(
         .limit(1)
     )
     fresh_run_id = fresh_run.scalar_one_or_none()
+    print(
+        f"[dual_search] operator={op_code} children={body.children} "
+        f"cache_check: country={body.country} checkin={body.checkin_beg}..{body.checkin_end} "
+        f"cutoff={cache_cutoff.isoformat()} -> fresh_run_id={fresh_run_id}",
+        flush=True,
+    )
     if fresh_run_id:
         print(
             f"[dual_search] operator={op_code} children={body.children} "
