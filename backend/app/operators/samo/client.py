@@ -17,7 +17,7 @@ import httpx
 
 from app.operators.samo.parser import parse_samo_prices_response
 
-DEFAULT_TIMEOUT = httpx.Timeout(15.0, connect=5.0)
+DEFAULT_TIMEOUT = httpx.Timeout(60.0, connect=10.0)
 
 # Defensive cap so a pagination/parsing bug can't spin forever against a
 # live cabinet. Should never actually trigger - real Kompas searches seen
