@@ -150,18 +150,18 @@ async def fetch_all_prices(
     while page <= MAX_PAGES_SAFETY_CAP:
         # Retry logic для случая когда САМО возвращает notify() вместо ehtml()
         result = None
-        for attempt in range(3):
+        for attempt in range(2):
             result = await fetch_prices_page(client, base_url, params, page=page, rev=rev)
             if not result["error"]:
                 break
-            if attempt < 2:
+            if attempt < 1:
                 import asyncio
                 print(
                     f"[samo] page={page} error='{result['error']}' "
-                    f"attempt={attempt+1}/3 — retrying in 5s",
+                    f"attempt={attempt+1}/2 — retrying in 2s",
                     flush=True,
                 )
-                await asyncio.sleep(5)
+                await asyncio.sleep(2)
                 rev = _generate_rev()  # новый rev на каждую попытку
 
         if result["error"]:
