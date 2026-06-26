@@ -52,7 +52,7 @@ from app.services.normalization_service import NormalizationService
 
 router = APIRouter(prefix="/search", tags=["search"])
 
-CACHE_FRESHNESS_HOURS = 2
+CACHE_FRESHNESS_HOURS = 6
 PEGAS_DEFAULT_DEPARTURE_LOCATION_ID = 553  # Алматы — fallback если город не найден в БД
 
 
@@ -411,7 +411,7 @@ async def _run_operator_search(
     # Ищем по стране+датам+оператору — не по profile_id,
     # потому что scheduler пишет под широким профилем (весь диапазон дат),
     # а фронт создаёт узкий профиль под конкретную дату.
-    cache_cutoff = datetime.now(timezone.utc) - timedelta(hours=4)
+    cache_cutoff = datetime.now(timezone.utc) - timedelta(hours=6)
     fresh_run = await db.execute(
         select(NormalizedTour.scrape_run_id)
         .join(SearchProfile, NormalizedTour.profile_id == SearchProfile.id)
