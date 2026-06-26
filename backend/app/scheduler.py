@@ -204,9 +204,9 @@ def start_scheduler() -> None:
 
     scheduler.add_job(
         run_refresh,
-        IntervalTrigger(hours=3),
+        IntervalTrigger(hours=6),
         id="refresh",
-        name="Profile refresh every 3h",
+        name="Profile refresh every 6h",
         replace_existing=True,
         misfire_grace_time=600,
     )
