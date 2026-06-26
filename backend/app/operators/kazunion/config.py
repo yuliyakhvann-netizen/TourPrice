@@ -10,7 +10,7 @@ BASE_URL = "https://online.kazunion.com"
 OPERATOR_CODE = "kazunion"
 
 TOWN_FROM_ALMATY = 57  # confirmed via HTML option value
-CURRENCY_KZT = 2       # confirmed via DevTools
+CURRENCY_KZT = 4       # 4 = KZT у Kazunion (2=USD, 3=EUR, 4=KZT)
 FILTER_DEFAULT = 0
 PARTITION_PRICE_DEFAULT = 232  # confirmed via DevTools
 
