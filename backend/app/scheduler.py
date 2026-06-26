@@ -159,17 +159,22 @@ async def run_refresh() -> None:
         await asyncio.sleep(3)
         try:
             from app.api.v1.search import _run_country_refresh
-            await _run_country_refresh(
-                country=country,
-                departure_city=DEPARTURE_CITY,
-                checkin_beg=checkin_beg,
-                checkin_end=checkin_end,
-                nights_from=7,
-                nights_till=14,
-                adults=ADULTS,
-                child_age=CHILD_AGE,
+            await asyncio.wait_for(
+                _run_country_refresh(
+                    country=country,
+                    departure_city=DEPARTURE_CITY,
+                    checkin_beg=checkin_beg,
+                    checkin_end=checkin_end,
+                    nights_from=7,
+                    nights_till=14,
+                    adults=ADULTS,
+                    child_age=CHILD_AGE,
+                ),
+                timeout=300,  # 5 минут на страну максимум
             )
             logger.info("[scheduler] refresh: %s done", country)
+        except asyncio.TimeoutError:
+            logger.error("[scheduler] refresh: %s TIMED OUT after 5 min, skipping", country)
         except Exception as e:
             logger.error("[scheduler] refresh: %s FAILED: %s", country, e)
 
@@ -199,89 +204,6 @@ def start_scheduler() -> None:
 
     scheduler.start()
     logger.info("[scheduler] started: discovery@03:00, refresh@every3h")
-
-
-async def run_horizon_expansion() -> None:
-    """
-    Создаёт профили поиска на даты которых ещё нет в БД.
-    Горизонт: сегодня + 120 дней.
-    Запускается из run_discovery раз в сутки.
-    """
-    import datetime as dt
-    from sqlalchemy import select, and_
-    from app.database import AsyncSessionLocal
-    from app.models.search_profile import SearchProfile
-    from app.models.mappings import CountryMapping, CityMapping
-    from app.models.operator import Operator
-
-    HORIZON_DAYS = 180
-    NIGHTS_FROM = 7
-    NIGHTS_TILL = 14
-    ADULTS = 2
-    DEPARTURE_CITY = "Алматы"
-
-    today = dt.date.today()
-    target_end = today + dt.timedelta(days=HORIZON_DAYS)
-
-    _log(f"horizon_expansion: filling dates up to {target_end}")
-
-    async with AsyncSessionLocal() as db:
-        # Берём все подтверждённые страны
-        r = await db.execute(
-            select(CountryMapping.normalized_value)
-            .where(CountryMapping.confirmed == True)  # noqa
-            .distinct()
-        )
-        countries = [row[0] for row in r.all()]
-
-        created = 0
-        for country in countries:
-            # Проверяем какие недели уже есть в БД для этой страны
-            r = await db.execute(
-                select(SearchProfile.departure_date).where(
-                    and_(
-                        SearchProfile.country == country,
-                        SearchProfile.departure_city == DEPARTURE_CITY,
-                        SearchProfile.adults == ADULTS,
-                        SearchProfile.children == 0,
-                        SearchProfile.departure_date >= today,
-                        SearchProfile.departure_date <= target_end,
-                    )
-                )
-            )
-            existing_dates = {row[0] for row in r.all()}
-
-            # Создаём профили на каждую неделю которой нет
-            check_date = today + dt.timedelta(days=7)
-            while check_date <= target_end:
-                if check_date not in existing_dates:
-                    # Профиль без детей
-                    db.add(SearchProfile(
-                        name=f"{country} from {DEPARTURE_CITY} ({check_date})",
-                        country=country,
-                        departure_city=DEPARTURE_CITY,
-                        departure_date=check_date,
-                        nights=NIGHTS_FROM,
-                        adults=ADULTS,
-                        children=0,
-                        is_active=True,
-                    ))
-                    # Профиль с ребёнком
-                    db.add(SearchProfile(
-                        name=f"{country} from {DEPARTURE_CITY} ({check_date}) +child",
-                        country=country,
-                        departure_city=DEPARTURE_CITY,
-                        departure_date=check_date,
-                        nights=NIGHTS_FROM,
-                        adults=ADULTS,
-                        children=1,
-                        is_active=True,
-                    ))
-                    created += 2
-                check_date += dt.timedelta(days=7)
-
-        await db.commit()
-        _log(f"horizon_expansion: created {created} new profiles")
 
 
 async def run_horizon_expansion() -> None:
