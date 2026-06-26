@@ -407,15 +407,22 @@ async def _run_operator_search(
     if town_from_raw is None or state_raw is None:
         return None
 
-    # Проверяем свежие данные в normalized_tours (не старше 1 часа)
-    from datetime import timedelta
+    # Проверяем свежие данные в normalized_tours (не старше 4 часов)
+    # Ищем по стране+датам+оператору — не по profile_id,
+    # потому что scheduler пишет под широким профилем (весь диапазон дат),
+    # а фронт создаёт узкий профиль под конкретную дату.
     cache_cutoff = datetime.now(timezone.utc) - timedelta(hours=4)
     fresh_run = await db.execute(
         select(NormalizedTour.scrape_run_id)
+        .join(SearchProfile, NormalizedTour.profile_id == SearchProfile.id)
         .where(
             NormalizedTour.operator_id == op_id,
-            NormalizedTour.profile_id == profile.id,
             NormalizedTour.scraped_at >= cache_cutoff,
+            SearchProfile.country == body.country,
+            SearchProfile.departure_city == body.departure_city,
+            SearchProfile.children == body.children,
+            NormalizedTour.departure_date >= body.checkin_beg,
+            NormalizedTour.departure_date <= body.checkin_end,
         )
         .order_by(NormalizedTour.scraped_at.desc())
         .limit(1)
@@ -424,7 +431,7 @@ async def _run_operator_search(
     if fresh_run_id:
         print(
             f"[dual_search] operator={op_code} children={body.children} "
-            f"CACHE HIT scrape_run_id={fresh_run_id}",
+            f"CACHE HIT (country-wide) scrape_run_id={fresh_run_id}",
             flush=True,
         )
         return fresh_run_id
