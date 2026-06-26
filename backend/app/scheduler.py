@@ -153,7 +153,7 @@ async def run_refresh() -> None:
 
     today = dt.date.today()
     checkin_beg = today + dt.timedelta(days=1)
-    checkin_end = today + dt.timedelta(days=180)
+    checkin_end = today + dt.timedelta(days=60)
 
     for country in countries:
         await asyncio.sleep(3)

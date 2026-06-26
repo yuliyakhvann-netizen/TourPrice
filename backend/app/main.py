@@ -8,7 +8,6 @@ from app.core.logging import setup_logging
 from app.database import engine
 from app.models import *  # noqa: F401, F403 — registers all models with SQLAlchemy
 
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_logging()
