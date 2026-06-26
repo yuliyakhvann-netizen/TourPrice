@@ -411,7 +411,7 @@ async def _run_operator_search(
     # Ищем по стране+датам+оператору — не по profile_id,
     # потому что scheduler пишет под широким профилем (весь диапазон дат),
     # а фронт создаёт узкий профиль под конкретную дату.
-    cache_cutoff = datetime.now(timezone.utc) - timedelta(hours=6)
+    cache_cutoff = datetime.now(timezone.utc) - timedelta(hours=12)
     fresh_run = await db.execute(
         select(NormalizedTour.scrape_run_id)
         .join(SearchProfile, NormalizedTour.profile_id == SearchProfile.id)
@@ -884,6 +884,9 @@ async def _run_country_refresh(
         operators = operators_result.all()
 
         for op_id, op_code in operators:
+            if op_code == "pegas":
+                logger.info("[country_refresh] skipping pegas (IP blocked on Railway)")
+                continue
             for body, prof in [
                 (body_no_child, profile_no_child),
                 (body_with_child, profile_with_child),
