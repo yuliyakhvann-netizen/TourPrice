@@ -57,10 +57,19 @@ class KazunionOperator:
             partition_price=kazunion_config.PARTITION_PRICE_DEFAULT,
         )
         async with httpx.AsyncClient(follow_redirects=True) as client:
-            # Kazunion требует куку SAMO-сессии — получаем её через инит-запрос
+            # Инит-запрос 1: устанавливаем город вылета
             await client.get(
                 f"{self.base_url}/search_tour",
                 params={"TOWNFROMINC": kazunion_config.TOWN_FROM_ALMATY},
+                timeout=httpx.Timeout(15.0, connect=5.0),
+            )
+            # Инит-запрос 2: устанавливаем страну назначения
+            await client.get(
+                f"{self.base_url}/search_tour",
+                params={
+                    "TOWNFROMINC": kazunion_config.TOWN_FROM_ALMATY,
+                    "STATEINC": state_inc,
+                },
                 timeout=httpx.Timeout(15.0, connect=5.0),
             )
             return await fetch_all_prices(client, self.base_url, params)
