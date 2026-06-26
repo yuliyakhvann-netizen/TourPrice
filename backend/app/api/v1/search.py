@@ -411,7 +411,7 @@ async def _run_operator_search(
     # Ищем по стране+датам+оператору — не по profile_id,
     # потому что scheduler пишет под широким профилем (весь диапазон дат),
     # а фронт создаёт узкий профиль под конкретную дату.
-    cache_cutoff = datetime.now(timezone.utc) - timedelta(hours=12)
+    cache_cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
     fresh_run = await db.execute(
         select(NormalizedTour.scrape_run_id)
         .join(SearchProfile, NormalizedTour.profile_id == SearchProfile.id)
