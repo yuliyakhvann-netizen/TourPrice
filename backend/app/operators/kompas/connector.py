@@ -80,5 +80,11 @@ class KompasOperator:
             extra=extra,
         )
 
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(follow_redirects=True) as client:
+            # Инит-запрос для установки сессионных куки (как у Selfie/Kazunion)
+            await client.get(
+                f"{self.base_url}/search_tour",
+                params={"TOWNFROMINC": town_from_inc},
+                timeout=httpx.Timeout(15.0, connect=5.0),
+            )
             return await fetch_all_prices(client, self.base_url, params)
