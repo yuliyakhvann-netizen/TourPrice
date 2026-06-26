@@ -316,6 +316,7 @@ async def dual_search(
             city_repo=city_repo,
             country_repo=country_repo,
             normalization_service=normalization_service,
+            cache_only=True,
         )
         if run_id:
             run_ids_no_child.append(run_id)
@@ -333,6 +334,7 @@ async def dual_search(
             city_repo=city_repo,
             country_repo=country_repo,
             normalization_service=normalization_service,
+            cache_only=True,
         )
         if run_id:
             run_ids_with_child.append(run_id)
@@ -393,6 +395,7 @@ async def _run_operator_search(
     city_repo: CityMappingRepository,
     country_repo: CountryMappingRepository,
     normalization_service: NormalizationService,
+    cache_only: bool = False,
 ) -> str | None:
     """
     Один прогон одного оператора, результат пишется в normalized_tours.
@@ -441,6 +444,14 @@ async def _run_operator_search(
             flush=True,
         )
         return fresh_run_id
+
+    if cache_only:
+        print(
+            f"[dual_search] operator={op_code} children={body.children} "
+            f"cache_only=True, cache miss — skipping live search",
+            flush=True,
+        )
+        return None
 
     try:
         if op_code == PEGAS_OPERATOR_CODE:
