@@ -138,20 +138,23 @@ async def run_discovery() -> None:
 
 async def run_refresh() -> None:
     """
-    Every 3 hours: re-runs dual search for each active country.
-    One broad search per country covers all dates in the next 120 days.
-    Much faster than per-profile refresh.
+    Every 6 hours: re-runs dual search for each active country.
+    Параллельно: max 3 страны одновременно, каждая страна — 6 месячных окон.
+    Цель: ~30-40 мин вместо 10-15 часов.
     """
     import datetime as dt
     from sqlalchemy import select
     from app.database import AsyncSessionLocal
     from app.models.mappings import CountryMapping
+    from app.api.v1.search import _run_country_refresh
 
     DEPARTURE_CITY = "Алматы"
     ADULTS = 2
     CHILD_AGE = 4
+    MAX_PARALLEL_COUNTRIES = 3  # не перегружаем операторов
+    MONTH_TIMEOUT = 300  # 5 минут на страну/месяц (FunSun медленнее из-за чанков)
 
-    logger.info("[scheduler] refresh job started")
+    _log("refresh job started")
 
     async with AsyncSessionLocal() as db:
         r = await db.execute(
@@ -161,45 +164,51 @@ async def run_refresh() -> None:
         )
         countries = [row[0] for row in r.all()]
 
-    logger.info("[scheduler] refresh: %d countries", len(countries))
+    _log(f"refresh: {len(countries)} countries, parallel={MAX_PARALLEL_COUNTRIES}")
 
     today = dt.date.today()
 
-    # Разбиваем на месячные окна — операторы не отдают данные за 6 месяцев сразу
+    # Месячные окна на 6 месяцев вперёд
     monthly_windows = []
     for month_offset in range(6):
-        window_beg = today + dt.timedelta(days=1) if month_offset == 0 else (
-            today.replace(day=1) + dt.timedelta(days=32 * month_offset)
-        ).replace(day=1)
+        if month_offset == 0:
+            window_beg = today + dt.timedelta(days=1)
+        else:
+            window_beg = (today.replace(day=1) + dt.timedelta(days=32 * month_offset)).replace(day=1)
         next_month = (window_beg.replace(day=1) + dt.timedelta(days=32)).replace(day=1)
         window_end = next_month - dt.timedelta(days=1)
         monthly_windows.append((window_beg, window_end))
 
-    for country in countries:
-        for window_beg, window_end in monthly_windows:
-            await asyncio.sleep(2)
-            try:
-                from app.api.v1.search import _run_country_refresh
-                await asyncio.wait_for(
-                    _run_country_refresh(
-                        country=country,
-                        departure_city=DEPARTURE_CITY,
-                        checkin_beg=window_beg,
-                        checkin_end=window_end,
-                        nights_from=7,
-                        nights_till=14,
-                        adults=ADULTS,
-                        child_age=CHILD_AGE,
-                    ),
-                    timeout=180,  # 3 минуты на месяц
-                )
-                logger.info("[scheduler] refresh: %s %s..%s done", country, window_beg, window_end)
-            except asyncio.TimeoutError:
-                logger.error("[scheduler] refresh: %s %s TIMED OUT", country, window_beg)
-            except Exception as e:
-                logger.error("[scheduler] refresh: %s %s FAILED: %s", country, window_beg, e)
+    semaphore = asyncio.Semaphore(MAX_PARALLEL_COUNTRIES)
 
-    logger.info("[scheduler] refresh job complete")
+    async def refresh_country(country: str) -> None:
+        async with semaphore:
+            for window_beg, window_end in monthly_windows:
+                try:
+                    await asyncio.wait_for(
+                        _run_country_refresh(
+                            country=country,
+                            departure_city=DEPARTURE_CITY,
+                            checkin_beg=window_beg,
+                            checkin_end=window_end,
+                            nights_from=7,
+                            nights_till=14,
+                            adults=ADULTS,
+                            child_age=CHILD_AGE,
+                        ),
+                        timeout=MONTH_TIMEOUT,
+                    )
+                    _log(f"refresh: {country} {window_beg}..{window_end} done")
+                except asyncio.TimeoutError:
+                    logger.error("[scheduler] refresh: %s %s TIMED OUT", country, window_beg)
+                except Exception as e:
+                    logger.error("[scheduler] refresh: %s %s FAILED: %s", country, window_beg, e)
+                await asyncio.sleep(1)
+
+    # Запускаем все страны параллельно (semaphore ограничивает до MAX_PARALLEL_COUNTRIES)
+    await asyncio.gather(*[refresh_country(c) for c in countries])
+
+    _log("refresh job complete")
 
 
 def start_scheduler() -> None:
