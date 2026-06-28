@@ -125,6 +125,41 @@ async def trigger_kompas_resort_discovery(
 
     count = await import_kompas_countries(db)
     return {"new_countries": count}
+@router.post("/scheduler/run/country/{country}")
+async def scheduler_run_country(country: str, background_tasks: BackgroundTasks):
+    """
+    Запускает refresh для одной страны немедленно в фоне.
+    Пример: POST /api/v1/operators/scheduler/run/country/Турция
+    """
+    import datetime as dt
+    from app.api.v1.search import _run_country_refresh
+
+    async def run():
+        today = dt.date.today()
+        for month_offset in range(6):
+            if month_offset == 0:
+                window_beg = today + dt.timedelta(days=1)
+            else:
+                window_beg = (today.replace(day=1) + dt.timedelta(days=32 * month_offset)).replace(day=1)
+            next_month = (window_beg.replace(day=1) + dt.timedelta(days=32)).replace(day=1)
+            window_end = next_month - dt.timedelta(days=1)
+            print(f"[country_refresh] {country} {window_beg}..{window_end}", flush=True)
+            try:
+                await _run_country_refresh(
+                    country=country,
+                    departure_city="Алматы",
+                    checkin_beg=window_beg,
+                    checkin_end=window_end,
+                    nights_from=7,
+                    nights_till=14,
+                    adults=2,
+                    child_age=4,
+                )
+            except Exception as e:
+                print(f"[country_refresh] {country} {window_beg} FAILED: {e}", flush=True)
+
+    background_tasks.add_task(run)
+    return {"status": "started", "country": country}
 @router.post("/scheduler/run/{job_id}")
 async def scheduler_run_now(job_id: str, background_tasks: BackgroundTasks):
     """
