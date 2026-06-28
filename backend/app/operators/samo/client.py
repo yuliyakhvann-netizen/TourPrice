@@ -170,7 +170,11 @@ async def fetch_all_prices(
         if result["empty"]:
             break
 
-        all_rows.extend(result["rows"])
+        new_rows = result["rows"]
+        if not new_rows:
+            break  # пустая страница — останавливаемся даже если total_pages говорит продолжать
+
+        all_rows.extend(new_rows)
 
         total_pages = result["pagination"]["total_pages"]
         if page >= total_pages:
