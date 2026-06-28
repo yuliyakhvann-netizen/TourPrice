@@ -65,8 +65,8 @@ export const OPERATOR_NAMES: Record<number, string> = {
   2: 'Pegas',
   3: 'Anex',
   4: 'Kompas',
-  8: 'Selfie',
-  10: 'Kazunion',
+  6: 'Selfie',
+  7: 'Kazunion',
 }
 
 export interface DualSearchRequest {
