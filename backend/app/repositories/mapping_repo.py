@@ -314,28 +314,23 @@ class HotelMappingRepository(BaseRepository[HotelMapping]):
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
+    FUNSUN_OPERATOR_ID = 1  # FunSun — эталонный оператор
+
     async def suggest_matches(
         self, raw_value: str, exclude_operator_id: int, limit: int = 5
     ) -> list[dict]:
         """
-        Fuzzy-match raw_value against every OTHER operator's hotel
-        names (confirmed or not) and return the top `limit` candidates
-        by similarity score, best first. This is a suggestion aid for
-        a human reviewer, not an auto-confirm mechanism - the manager
-        still clicks to accept a match (see HotelMapping docstring on
-        why hotel-name matching can't be done unattended).
-
-        Candidates are deduplicated by canonical_hotel_id where one
-        exists, so a hotel already confirmed under 3 operators shows
-        once, not 3 times, using its first-seen raw name as the
-        display label.
+        Вариант В: сначала ищем совпадения среди FunSun (эталон),
+        затем среди остальных операторов если FunSun не дал достаточно результатов.
         """
         stmt = select(HotelMapping).where(HotelMapping.operator_id != exclude_operator_id)
         result = await self.session.execute(stmt)
         candidates = list(result.scalars().all())
 
         seen_canonical: set[int] = set()
-        scored: list[dict] = []
+        funsun_scored: list[dict] = []
+        other_scored: list[dict] = []
+
         for c in candidates:
             if c.canonical_hotel_id is not None:
                 if c.canonical_hotel_id in seen_canonical:
@@ -343,19 +338,29 @@ class HotelMappingRepository(BaseRepository[HotelMapping]):
                 seen_canonical.add(c.canonical_hotel_id)
 
             score = fuzz.token_sort_ratio(raw_value, c.raw_value)
-            scored.append(
-                {
-                    "hotel_mapping_id": c.id,
-                    "operator_id": c.operator_id,
-                    "raw_value": c.raw_value,
-                    "canonical_hotel_id": c.canonical_hotel_id,
-                    "confirmed": c.confirmed,
-                    "score": round(score, 1),
-                }
-            )
+            entry = {
+                "hotel_mapping_id": c.id,
+                "operator_id": c.operator_id,
+                "raw_value": c.raw_value,
+                "canonical_hotel_id": c.canonical_hotel_id,
+                "confirmed": c.confirmed,
+                "score": round(score, 1),
+            }
+            if c.operator_id == self.FUNSUN_OPERATOR_ID:
+                funsun_scored.append(entry)
+            else:
+                other_scored.append(entry)
 
-        scored.sort(key=lambda x: x["score"], reverse=True)
-        return scored[:limit]
+        funsun_scored.sort(key=lambda x: x["score"], reverse=True)
+        other_scored.sort(key=lambda x: x["score"], reverse=True)
+
+        # Сначала FunSun кандидаты, потом остальные — до limit
+        combined = funsun_scored[:limit] + other_scored[:limit]
+        combined.sort(key=lambda x: (
+            0 if x["operator_id"] == self.FUNSUN_OPERATOR_ID else 1,
+            -x["score"]
+        ))
+        return combined[:limit]
 
     async def merge(self, source_id: int, target_id: int) -> HotelMapping | None:
         """
@@ -471,8 +476,23 @@ class HotelMappingRepository(BaseRepository[HotelMapping]):
 
         # Собираем все пары выше порога
         pairs: list[tuple[HotelMapping, HotelMapping, float]] = []
-        for i, op1 in enumerate(operator_ids):
-            for op2 in operator_ids[i+1:]:
+        FUNSUN_OPERATOR_ID = 1
+
+        # Сначала матчим FunSun против всех остальных (эталон)
+        funsun_hotels = by_operator.get(FUNSUN_OPERATOR_ID, [])
+        for op_id, hotels in by_operator.items():
+            if op_id == FUNSUN_OPERATOR_ID:
+                continue
+            for h_fs in funsun_hotels:
+                for h_other in hotels:
+                    score = fuzz.token_sort_ratio(h_fs.raw_value, h_other.raw_value)
+                    if score >= threshold:
+                        pairs.append((h_fs, h_other, score))
+
+        # Затем матчим остальных между собой (этап 2)
+        non_funsun = [op for op in operator_ids if op != FUNSUN_OPERATOR_ID]
+        for i, op1 in enumerate(non_funsun):
+            for op2 in non_funsun[i+1:]:
                 for h1 in by_operator[op1]:
                     for h2 in by_operator[op2]:
                         score = fuzz.token_sort_ratio(h1.raw_value, h2.raw_value)
