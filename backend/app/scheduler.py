@@ -81,6 +81,18 @@ async def run_discovery() -> None:
     except Exception as e:
         logger.error("[scheduler] kazunion discovery FAILED: %s", e)
 
+    # FunSun discovery — динамически парсит страны из инит-запроса
+    try:
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(select(Operator).where(Operator.code == "funsun"))
+            op = result.scalar_one_or_none()
+            if op and op.is_active:
+                from app.operators.funsun.catalog_importer import discover_funsun_resorts
+                totals = await discover_funsun_resorts(db, operator_id=op.id)
+                logger.info("[scheduler] funsun discovery: %s", totals)
+    except Exception as e:
+        logger.error("[scheduler] funsun discovery FAILED: %s", e)
+
     # Pegas re-import
     try:
         async with AsyncSessionLocal() as db:

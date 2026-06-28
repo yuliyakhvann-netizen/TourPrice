@@ -895,9 +895,6 @@ async def _run_country_refresh(
         operators = operators_result.all()
 
         for op_id, op_code in operators:
-            if op_code == "pegas":
-                logger.info("[country_refresh] skipping pegas (IP blocked on Railway)")
-                continue
             for body, prof in [
                 (body_no_child, profile_no_child),
                 (body_with_child, profile_with_child),

@@ -33,6 +33,10 @@ from app.models.kazunion_catalog import (
     KazunionCountry, 
     KazunionResort,
 )
+from app.models.funsun_catalog import (
+    FunSunCountry,
+    FunSunResort,
+)
 from app.models.samo_catalog import SamoDepartureCity
 from app.models.operator_session import OperatorSession
 from app.models.audit_log import AuditLog
@@ -64,4 +68,6 @@ __all__ = [
     "SelfieCountry",
     "SelfieResort",
     "SamoDepartureCity",
+    "FunSunCountry",
+    "FunSunResort",
 ]
