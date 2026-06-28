@@ -56,7 +56,10 @@ class SelfieOperator:
             filter_value=selfie_config.FILTER_DEFAULT,
             partition_price=selfie_config.PARTITION_PRICE_DEFAULT,
         )
-        async with httpx.AsyncClient(follow_redirects=True) as client:
+        async with httpx.AsyncClient(
+            follow_redirects=True,
+            timeout=httpx.Timeout(20.0, connect=5.0),  # 20 сек на страницу, не 60
+        ) as client:
             # Selfie требует куку сессии — получаем через инит-запрос
             await client.get(
                 f"{self.base_url}/search_tour",

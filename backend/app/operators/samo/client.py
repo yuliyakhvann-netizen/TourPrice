@@ -134,6 +134,7 @@ async def fetch_all_prices(
     client: httpx.AsyncClient,
     base_url: str,
     params: SamoSearchParams,
+    max_pages: int = MAX_PAGES_SAFETY_CAP,
 ) -> list[dict]:
     """
     Fetch every page of a SAMO PRICES search and return the combined,
@@ -147,7 +148,7 @@ async def fetch_all_prices(
     all_rows: list[dict] = []
 
     page = 1
-    while page <= MAX_PAGES_SAFETY_CAP:
+    while page <= max_pages:
         # Retry logic для случая когда САМО возвращает notify() вместо ehtml()
         result = None
         for attempt in range(2):
