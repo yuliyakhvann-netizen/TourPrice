@@ -273,3 +273,11 @@
 .sp-export-xlsx:hover {
   background: #15803d;
 }
+.vs-baseline-h {
+  background: #f0f4ff;
+  color: #2563eb;
+}
+.diff-neg {
+  color: #16a34a;
+  font-weight: 600;
+}

@@ -5,7 +5,8 @@ import MultiSelect from '../components/MultiSelect'
 import * as XLSX from 'xlsx'
 import './SearchPage.css'
 
-const OPERATORS_ORDER = ['kompas', 'pegas', 'selfie', 'funsun', 'kazunion']
+const OPERATORS_ORDER = ['funsun', 'kompas', 'pegas', 'selfie', 'kazunion']
+const BASELINE_OPERATOR = 'funsun'
 const OPERATOR_LABELS: Record<string, string> = {
   kompas: 'Kompas',
   pegas: 'Pegas',
@@ -23,6 +24,14 @@ function fmtDiff(val: number | null) {
   if (val === null) return '—'
   const rounded = Math.round(val)
   return rounded.toLocaleString('ru-RU')
+}
+
+function fmtVsBaseline(val: number | null) {
+  if (val === null) return '—'
+  const rounded = Math.round(val)
+  if (rounded === 0) return '='
+  const sign = rounded > 0 ? '+' : ''
+  return sign + rounded.toLocaleString('ru-RU')
 }
 
 function todayStr() {
@@ -412,7 +421,10 @@ export default function SearchPage() {
                       <React.Fragment key={code}>
                         <th className="subh" onClick={() => handleSort(`${code}_adults`)} style={{cursor:'pointer'}}>2 взр{arrow(`${code}_adults`)}</th>
                         <th className="subh" onClick={() => handleSort(`${code}_child`)} style={{cursor:'pointer'}}>+реб{arrow(`${code}_child`)}</th>
-                        <th className="subh diff-h" onClick={() => handleSort(`${code}_diff`)} style={{cursor:'pointer'}}>разн.{arrow(`${code}_diff`)}</th>
+                        {code === BASELINE_OPERATOR
+                          ? <th className="subh diff-h">разн.</th>
+                          : <th className="subh diff-h vs-baseline-h" onClick={() => handleSort(`${code}_vs`)} style={{cursor:'pointer'}}>vs FS{arrow(`${code}_vs`)}</th>
+                        }
                       </React.Fragment>
                     ))}
                   </tr>
@@ -429,11 +441,18 @@ export default function SearchPage() {
                       <td className="c">{row.nights}</td>
                       {operatorCodes.map(code => {
                         const op = opMap[code]
+                        const baseline = opMap[BASELINE_OPERATOR]
+                        const vsAdults = (code !== BASELINE_OPERATOR && op?.price_adults_only != null && baseline?.price_adults_only != null)
+                          ? op.price_adults_only - baseline.price_adults_only
+                          : null
                         return (
                           <React.Fragment key={code}>
                             <td className="price-cell">{op ? fmt(op.price_adults_only) : '—'}</td>
                             <td className="price-cell">{op ? fmt(op.price_with_child) : '—'}</td>
-                            <td className={`price-cell diff-cell ${op?.child_diff != null && op.child_diff > 0 ? 'diff-pos' : ''}`}>{op ? fmtDiff(op.child_diff) : '—'}</td>
+                            {code === BASELINE_OPERATOR
+                              ? <td className={`price-cell diff-cell ${op?.child_diff != null && op.child_diff > 0 ? 'diff-pos' : ''}`}>{op ? fmtDiff(op.child_diff) : '—'}</td>
+                              : <td className={`price-cell diff-cell ${vsAdults != null && vsAdults < 0 ? 'diff-neg' : vsAdults != null && vsAdults > 0 ? 'diff-pos' : ''}`}>{fmtVsBaseline(vsAdults)}</td>
+                            }
                           </React.Fragment>
                         )
                       })}
