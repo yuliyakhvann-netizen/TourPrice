@@ -66,4 +66,14 @@ class SelfieOperator:
                 params={"TOWNFROMINC": selfie_config.TOWN_FROM_ALMATY},
                 timeout=httpx.Timeout(15.0, connect=5.0),
             )
-            return await fetch_all_prices(client, self.base_url, params)
+            # Selfie игнорирует фильтр дат — ограничиваем страницы для коротких окон
+            import datetime as dt
+            try:
+                beg = dt.datetime.strptime(checkin_beg, "%Y%m%d").date()
+                end = dt.datetime.strptime(checkin_end, "%Y%m%d").date()
+                window_days = (end - beg).days + 1
+            except Exception:
+                window_days = 30
+            # Для окна ≤3 дней — максимум 3 страницы, иначе стандартные 30
+            max_pages = 3 if window_days <= 3 else 30
+            return await fetch_all_prices(client, self.base_url, params, max_pages=max_pages)
