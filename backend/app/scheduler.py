@@ -225,11 +225,27 @@ def start_scheduler() -> None:
 
     scheduler.add_job(
         run_refresh,
-        IntervalTrigger(hours=6),
-        id="refresh",
-        name="Profile refresh every 6h",
+        CronTrigger(hour=3, minute=0, timezone="Asia/Almaty"),  # 03:00 Алматы
+        id="refresh_morning",
+        name="Morning refresh 03:00",
         replace_existing=True,
-        misfire_grace_time=600,
+        misfire_grace_time=3600,
+    )
+    scheduler.add_job(
+        run_refresh,
+        CronTrigger(hour=10, minute=0, timezone="Asia/Almaty"),  # 10:00 Алматы
+        id="refresh_midday",
+        name="Midday refresh 10:00",
+        replace_existing=True,
+        misfire_grace_time=3600,
+    )
+    scheduler.add_job(
+        run_refresh,
+        CronTrigger(hour=13, minute=0, timezone="Asia/Almaty"),  # 13:00 Алматы
+        id="refresh_afternoon",
+        name="Afternoon refresh 13:00",
+        replace_existing=True,
+        misfire_grace_time=3600,
     )
 
     scheduler.start()
