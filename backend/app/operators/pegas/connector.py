@@ -181,6 +181,7 @@ class PegasOperator:
         results = []
         if not items:
             return []
+        for item in items:
             try:
                 price = item.get("Price")
                 if price is None:
