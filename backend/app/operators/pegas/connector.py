@@ -179,7 +179,8 @@ class PegasOperator:
         airline_cache: dict[int, str] = {}
 
         results = []
-        for item in items:
+        if not items:
+            return []
             try:
                 price = item.get("Price")
                 if price is None:
