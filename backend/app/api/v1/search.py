@@ -316,7 +316,7 @@ async def dual_search(
             city_repo=city_repo,
             country_repo=country_repo,
             normalization_service=normalization_service,
-            cache_only=True,
+            cache_only=(op_code == PEGAS_OPERATOR_CODE),
         )
         if run_id:
             run_ids_no_child.append(run_id)
