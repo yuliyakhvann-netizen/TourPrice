@@ -136,7 +136,7 @@ async def scheduler_run_country(country: str, background_tasks: BackgroundTasks)
 
     async def run():
         today = dt.date.today()
-        for month_offset in range(6):
+        for month_offset in range(3):  # Pegas медленный — собираем только 3 месяца
             if month_offset == 0:
                 window_beg = today + dt.timedelta(days=1)
             else:

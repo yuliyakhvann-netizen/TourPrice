@@ -170,7 +170,7 @@ async def run_refresh() -> None:
 
     # Месячные окна на 6 месяцев вперёд
     monthly_windows = []
-    for month_offset in range(6):
+    for month_offset in range(3):
         if month_offset == 0:
             window_beg = today + dt.timedelta(days=1)
         else:

@@ -346,10 +346,9 @@ class NormalizationService:
         if previous is not None and previous.price is not None:
             price_change = price - previous.price
             if previous.price != 0:
-                price_change_pct = (
-                    Decimal(str(price_change / previous.price * 100))
-                    .quantize(Decimal("0.01"))
-                )
+                pct = Decimal(str(price_change / previous.price * 100))
+                # Ограничиваем до NUMERIC(6,2) максимум ±9999.99
+                price_change_pct = min(max(pct, Decimal("-9999.99")), Decimal("9999.99")).quantize(Decimal("0.01"))
 
         await self.snapshot_repo.create(
             normalized_tour_id=normalized_tour_id,
