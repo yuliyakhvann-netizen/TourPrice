@@ -151,7 +151,7 @@ async def run_refresh() -> None:
     DEPARTURE_CITY = "Алматы"
     ADULTS = 2
     CHILD_AGE = 4
-    MAX_PARALLEL_COUNTRIES = 3  # не перегружаем операторов
+    MAX_PARALLEL_COUNTRIES = 1
     MONTH_TIMEOUT = 300  # 5 минут на страну/месяц (FunSun медленнее из-за чанков)
 
     _log("refresh job started")
