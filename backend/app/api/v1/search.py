@@ -23,7 +23,7 @@ from decimal import Decimal
 
 logger = logging.getLogger(__name__)
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -259,6 +259,7 @@ async def _search_pegas(
 @router.post("/dual", response_model=list[DualSearchTourResult])
 async def dual_search(
     body: DualSearchRequest,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     city_repo: CityMappingRepository = Depends(get_city_mapping_repo),
     country_repo: CountryMappingRepository = Depends(get_country_mapping_repo),
@@ -303,7 +304,8 @@ async def dual_search(
     )
     operators = operators_result.all()
 
-    # Прогон 1: без детей — собираем scrape_run_ids
+    # Cache-only прогон — никогда не блокирует HTTP-запрос живым поиском.
+    # Если кэша нет, ставим фоновую задачу на сбор и сразу отдаём что есть.
     run_ids_no_child: list[str] = []
     for op_id, op_code in operators:
         run_id = await _run_operator_search(
@@ -316,12 +318,11 @@ async def dual_search(
             city_repo=city_repo,
             country_repo=country_repo,
             normalization_service=normalization_service,
-            cache_only=(op_code == PEGAS_OPERATOR_CODE),
+            cache_only=True,
         )
         if run_id:
             run_ids_no_child.append(run_id)
 
-    # Прогон 2: с ребёнком — собираем scrape_run_ids
     run_ids_with_child: list[str] = []
     for op_id, op_code in operators:
         run_id = await _run_operator_search(
@@ -340,6 +341,21 @@ async def dual_search(
             run_ids_with_child.append(run_id)
 
     await db.commit()
+
+    # Если кэш совсем пуст — запускаем фоновый сбор за пределами HTTP-запроса,
+    # чтобы Railway/Vercel прокси не убили соединение по таймауту.
+    if not run_ids_no_child and not run_ids_with_child:
+        background_tasks.add_task(
+            _run_country_refresh,
+            country=body.country,
+            departure_city=body.departure_city,
+            checkin_beg=body.checkin_beg,
+            checkin_end=body.checkin_end,
+            nights_from=body.nights_from,
+            nights_till=body.nights_till,
+            adults=body.adults,
+            child_age=body.child_age,
+        )
 
     # Для op_code_map нужны ВСЕ операторы, не только активные
     all_operators_result = await db.execute(select(Operator.id, Operator.code))
