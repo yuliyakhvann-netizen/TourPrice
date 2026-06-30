@@ -185,13 +185,13 @@ async def fetch_all_prices(
         if page >= total_pages:
             break
 
-        # Kazunion наблюдался зависающим стабильно после ~16 успешных
-        # страниц подряд (похоже на rate-limit по числу запросов в сессии).
-        # Небольшая пауза каждые 10 страниц даёт серверу "остыть".
-        if "kazunion" in base_url and page % 10 == 0:
-            import asyncio as _asyncio
-            print(f"[samo] {base_url} pausing 8s after page={page} to avoid rate limit", flush=True)
-            await _asyncio.sleep(8)
+        # Kazunion наблюдался зависающим стабильно после ровно ~16 страниц
+        # с одним и тем же rev — пауза не помогла, пробуем обновлять rev
+        # проактивно каждые 12 страниц, имитируя поведение, при котором
+        # клиент периодически "освежает" токен пагинации.
+        if "kazunion" in base_url and page % 12 == 0:
+            print(f"[samo] {base_url} refreshing rev after page={page} (was {rev})", flush=True)
+            rev = _generate_rev()
 
         page += 1
 
