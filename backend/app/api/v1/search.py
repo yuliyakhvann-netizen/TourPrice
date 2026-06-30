@@ -936,22 +936,28 @@ async def _run_country_refresh(
             prof_no_child = await op_db.get(SearchProfile, profile_no_child_id)
             prof_with_child = await op_db.get(SearchProfile, profile_with_child_id)
 
+            OPERATOR_TOTAL_TIMEOUT = 600  # 10 минут максимум на одного оператора за всю страну
             for body, prof in [
                 (body_no_child, prof_no_child),
                 (body_with_child, prof_with_child),
             ]:
                 try:
-                    await _run_operator_search(
-                        db=op_db,
-                        op_id=op_id,
-                        op_code=op_code,
-                        body=body,
-                        child_age=child_age if body.children > 0 else None,
-                        profile=prof,
-                        city_repo=city_repo,
-                        country_repo=country_repo,
-                        normalization_service=normalization_service,
+                    await asyncio.wait_for(
+                        _run_operator_search(
+                            db=op_db,
+                            op_id=op_id,
+                            op_code=op_code,
+                            body=body,
+                            child_age=child_age if body.children > 0 else None,
+                            profile=prof,
+                            city_repo=city_repo,
+                            country_repo=country_repo,
+                            normalization_service=normalization_service,
+                        ),
+                        timeout=OPERATOR_TOTAL_TIMEOUT,
                     )
+                except asyncio.TimeoutError:
+                    logger.error("[country_refresh] op=%s country=%s TOTAL TIMEOUT after %ds", op_code, country, OPERATOR_TOTAL_TIMEOUT)
                 except Exception as e:
                     logger.error("[country_refresh] op=%s country=%s FAILED: %s", op_code, country, e)
             await op_db.commit()
