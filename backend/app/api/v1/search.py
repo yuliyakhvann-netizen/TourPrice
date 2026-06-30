@@ -969,9 +969,15 @@ async def _run_country_refresh(
                     )
                 except asyncio.TimeoutError:
                     logger.error("[country_refresh] op=%s country=%s TOTAL TIMEOUT after %ds", op_code, country, OPERATOR_TOTAL_TIMEOUT)
+                    await op_db.rollback()
                 except Exception as e:
                     logger.error("[country_refresh] op=%s country=%s FAILED: %s", op_code, country, e)
-            await op_db.commit()
+                    await op_db.rollback()
+            try:
+                await op_db.commit()
+            except Exception as e:
+                logger.error("[country_refresh] op=%s country=%s final commit FAILED: %s", op_code, country, e)
+                await op_db.rollback()
 
     # Параллельно по операторам — разные домены/HTTP-клиенты/DB-сессии, конфликтов нет
     await asyncio.gather(*[run_one_operator(op_id, op_code) for op_id, op_code in operators])
