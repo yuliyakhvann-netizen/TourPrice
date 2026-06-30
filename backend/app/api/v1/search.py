@@ -881,27 +881,33 @@ async def _run_country_refresh(
         children=1,
     )
 
-    async with AsyncSessionLocal() as db:
-        profile_no_child = await _find_or_create_profile(db, body_no_child)
-        profile_with_child = await _find_or_create_profile(db, body_with_child)
-
-        city_repo = CityMappingRepository(db)
-        country_repo = CountryMappingRepository(db)
-        normalization_service = NormalizationService(db)
-
-        operators_result = await db.execute(
+    async with AsyncSessionLocal() as setup_db:
+        profile_no_child = await _find_or_create_profile(setup_db, body_no_child)
+        profile_with_child = await _find_or_create_profile(setup_db, body_with_child)
+        operators_result = await setup_db.execute(
             select(Operator.id, Operator.code).where(Operator.is_active == True)  # noqa
         )
         operators = operators_result.all()
+        await setup_db.commit()
+        profile_no_child_id = profile_no_child.id
+        profile_with_child_id = profile_with_child.id
 
-        for op_id, op_code in operators:
+    async def run_one_operator(op_id: int, op_code: str) -> None:
+        """Каждый оператор — своя DB-сессия, параллельные запросы не делят соединение."""
+        async with AsyncSessionLocal() as op_db:
+            city_repo = CityMappingRepository(op_db)
+            country_repo = CountryMappingRepository(op_db)
+            normalization_service = NormalizationService(op_db)
+            prof_no_child = await op_db.get(SearchProfile, profile_no_child_id)
+            prof_with_child = await op_db.get(SearchProfile, profile_with_child_id)
+
             for body, prof in [
-                (body_no_child, profile_no_child),
-                (body_with_child, profile_with_child),
+                (body_no_child, prof_no_child),
+                (body_with_child, prof_with_child),
             ]:
                 try:
                     await _run_operator_search(
-                        db=db,
+                        db=op_db,
                         op_id=op_id,
                         op_code=op_code,
                         body=body,
@@ -913,5 +919,7 @@ async def _run_country_refresh(
                     )
                 except Exception as e:
                     logger.error("[country_refresh] op=%s country=%s FAILED: %s", op_code, country, e)
+            await op_db.commit()
 
-        await db.commit()
+    # Параллельно по операторам — разные домены/HTTP-клиенты/DB-сессии, конфликтов нет
+    await asyncio.gather(*[run_one_operator(op_id, op_code) for op_id, op_code in operators])
