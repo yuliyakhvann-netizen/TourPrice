@@ -9,7 +9,7 @@ import type {
   DualSearchTourResult,
 } from '../types'
 
-const api = axios.create({ baseURL: '/api/v1' })
+const api = axios.create({ baseURL: '/api/v1', timeout: 600000 }) // 10 минут — лайв поиск по 5 операторам может занять время
 
 export const profilesApi = {
   list: () => api.get<SearchProfile[]>('/profiles/').then(r => r.data),
