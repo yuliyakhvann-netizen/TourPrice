@@ -938,46 +938,46 @@ async def _run_country_refresh(
         profile_no_child_id = profile_no_child.id
         profile_with_child_id = profile_with_child.id
 
-    async def run_one_operator(op_id: int, op_code: str) -> None:
-        """Каждый оператор — своя DB-сессия, параллельные запросы не делят соединение."""
-        async with AsyncSessionLocal() as op_db:
-            city_repo = CityMappingRepository(op_db)
-            country_repo = CountryMappingRepository(op_db)
-            normalization_service = NormalizationService(op_db)
-            prof_no_child = await op_db.get(SearchProfile, profile_no_child_id)
-            prof_with_child = await op_db.get(SearchProfile, profile_with_child_id)
+    OPERATOR_TOTAL_TIMEOUT = 600  # 10 минут максимум на одного оператора за один body (no-child/with-child)
 
-            OPERATOR_TOTAL_TIMEOUT = 600  # 10 минут максимум на одного оператора за всю страну
-            for body, prof in [
-                (body_no_child, prof_no_child),
-                (body_with_child, prof_with_child),
-            ]:
-                try:
-                    await asyncio.wait_for(
-                        _run_operator_search(
-                            db=op_db,
-                            op_id=op_id,
-                            op_code=op_code,
-                            body=body,
-                            child_age=child_age if body.children > 0 else None,
-                            profile=prof,
-                            city_repo=city_repo,
-                            country_repo=country_repo,
-                            normalization_service=normalization_service,
-                        ),
-                        timeout=OPERATOR_TOTAL_TIMEOUT,
-                    )
-                except asyncio.TimeoutError:
-                    logger.error("[country_refresh] op=%s country=%s TOTAL TIMEOUT after %ds", op_code, country, OPERATOR_TOTAL_TIMEOUT)
-                    await op_db.rollback()
-                except Exception as e:
-                    logger.error("[country_refresh] op=%s country=%s FAILED: %s", op_code, country, e)
-                    await op_db.rollback()
-            try:
+    async def run_one_body(op_id: int, op_code: str, body, profile_id: int) -> None:
+        """
+        Отдельная сессия на каждый (оператор, body) — после таймаута сессия
+        просто отбрасывается целиком, не переиспользуется. Переиспользование
+        сессии после asyncio.wait_for timeout ломает SQLAlchemy's async
+        greenlet context, поэтому единственный безопасный способ — новая
+        сессия каждый раз.
+        """
+        try:
+            async with AsyncSessionLocal() as op_db:
+                city_repo = CityMappingRepository(op_db)
+                country_repo = CountryMappingRepository(op_db)
+                normalization_service = NormalizationService(op_db)
+                prof = await op_db.get(SearchProfile, profile_id)
+
+                await asyncio.wait_for(
+                    _run_operator_search(
+                        db=op_db,
+                        op_id=op_id,
+                        op_code=op_code,
+                        body=body,
+                        child_age=child_age if body.children > 0 else None,
+                        profile=prof,
+                        city_repo=city_repo,
+                        country_repo=country_repo,
+                        normalization_service=normalization_service,
+                    ),
+                    timeout=OPERATOR_TOTAL_TIMEOUT,
+                )
                 await op_db.commit()
-            except Exception as e:
-                logger.error("[country_refresh] op=%s country=%s final commit FAILED: %s", op_code, country, e)
-                await op_db.rollback()
+        except asyncio.TimeoutError:
+            logger.error("[country_refresh] op=%s country=%s TOTAL TIMEOUT after %ds", op_code, country, OPERATOR_TOTAL_TIMEOUT)
+        except Exception as e:
+            logger.error("[country_refresh] op=%s country=%s FAILED: %s", op_code, country, e)
+
+    async def run_one_operator(op_id: int, op_code: str) -> None:
+        await run_one_body(op_id, op_code, body_no_child, profile_no_child_id)
+        await run_one_body(op_id, op_code, body_with_child, profile_with_child_id)
 
     # Параллельно по операторам — разные домены/HTTP-клиенты/DB-сессии, конфликтов нет
     await asyncio.gather(*[run_one_operator(op_id, op_code) for op_id, op_code in operators])
