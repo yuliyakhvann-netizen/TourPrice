@@ -100,7 +100,9 @@ class FunSunOperator:
                     filter_value=funsun_config.FILTER_DEFAULT,
                     partition_price=funsun_config.PARTITION_PRICE_DEFAULT,
                 )
-                rows = await fetch_all_prices(client, self.base_url, params)
+                chunk_days = (dt.datetime.strptime(chunk_end, "%Y%m%d").date() - dt.datetime.strptime(chunk_beg, "%Y%m%d").date()).days + 1
+                max_pages = 3 if chunk_days <= 3 else 30
+                rows = await fetch_all_prices(client, self.base_url, params, max_pages=max_pages)
                 all_rows.extend(rows)
                 print(
                     f"[funsun] chunk {chunk_beg}..{chunk_end} → {len(rows)} строк",
