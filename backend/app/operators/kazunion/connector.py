@@ -67,7 +67,14 @@ class KazunionOperator:
         import datetime as dt
 
         async def _do_search() -> list[dict]:
-            async with httpx.AsyncClient(follow_redirects=True, timeout=kazunion_timeout) as client:
+            # limits=httpx.Limits(max_keepalive_connections=0) отключает
+            # переиспользование TCP-соединений — каждый запрос открывает
+            # новое. Это исключает гипотезу про "мёртвый" keep-alive сокет
+            # как причину зависаний на середине пагинации.
+            limits = httpx.Limits(max_keepalive_connections=0, max_connections=5)
+            async with httpx.AsyncClient(
+                follow_redirects=True, timeout=kazunion_timeout, limits=limits
+            ) as client:
                 # Инит-запрос 1: устанавливаем город вылета
                 await client.get(
                     f"{self.base_url}/search_tour",

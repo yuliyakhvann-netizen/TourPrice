@@ -149,6 +149,9 @@ async def fetch_all_prices(
 
     page = 1
     while page <= max_pages:
+        import time as _time
+        _page_start = _time.monotonic()
+        print(f"[samo] {base_url} page={page} starting at {_page_start:.1f}", flush=True)
         # Retry logic для случая когда САМО возвращает notify() вместо ehtml()
         result = None
         for attempt in range(2):
@@ -165,6 +168,7 @@ async def fetch_all_prices(
                 await asyncio.sleep(2)
                 rev = _generate_rev()  # новый rev на каждую попытку
 
+        print(f"[samo] {base_url} page={page} finished in {_time.monotonic() - _page_start:.1f}s", flush=True)
         if result["error"]:
             raise RuntimeError(f"SAMO response could not be parsed: {result['error']}")
 
