@@ -66,36 +66,98 @@ class KazunionOperator:
         import asyncio
         import datetime as dt
 
-        async def _do_search() -> list[dict]:
-            # limits=httpx.Limits(max_keepalive_connections=0) отключает
-            # переиспользование TCP-соединений — каждый запрос открывает
-            # новое. Это исключает гипотезу про "мёртвый" keep-alive сокет
-            # как причину зависаний на середине пагинации.
+        REINIT_EVERY = 15  # пересоздаём клиент каждые 15 страниц
+
+        async def _make_client() -> httpx.AsyncClient:
             limits = httpx.Limits(max_keepalive_connections=0, max_connections=5)
-            async with httpx.AsyncClient(
+            return httpx.AsyncClient(
                 follow_redirects=True, timeout=kazunion_timeout, limits=limits
-            ) as client:
-                # Инит-запрос 1: устанавливаем город вылета
-                await client.get(
-                    f"{self.base_url}/search_tour",
-                    params={"TOWNFROMINC": kazunion_config.TOWN_FROM_ALMATY},
-                )
-                # Инит-запрос 2: устанавливаем страну назначения
-                await client.get(
-                    f"{self.base_url}/search_tour",
-                    params={
-                        "TOWNFROMINC": kazunion_config.TOWN_FROM_ALMATY,
-                        "STATEINC": state_inc,
-                    },
-                )
-                try:
-                    beg = dt.datetime.strptime(checkin_beg, "%Y%m%d").date()
-                    end = dt.datetime.strptime(checkin_end, "%Y%m%d").date()
-                    window_days = (end - beg).days + 1
-                except Exception:
-                    window_days = 30
-                max_pages = 3 if window_days <= 3 else 30
-                return await fetch_all_prices(client, self.base_url, params, max_pages=max_pages)
+            )
+
+        async def _init_client(client: httpx.AsyncClient) -> None:
+            """Два init-запроса, устанавливающие город вылета и страну."""
+            await client.get(
+                f"{self.base_url}/search_tour",
+                params={"TOWNFROMINC": kazunion_config.TOWN_FROM_ALMATY},
+            )
+            await client.get(
+                f"{self.base_url}/search_tour",
+                params={
+                    "TOWNFROMINC": kazunion_config.TOWN_FROM_ALMATY,
+                    "STATEINC": state_inc,
+                },
+            )
+
+        async def _do_search() -> list[dict]:
+            from app.operators.samo.client import (
+                fetch_prices_page,
+                _generate_rev,
+                MAX_PAGES_SAFETY_CAP,
+            )
+            import asyncio as _asyncio
+
+            try:
+                beg = dt.datetime.strptime(checkin_beg, "%Y%m%d").date()
+                end = dt.datetime.strptime(checkin_end, "%Y%m%d").date()
+                window_days = (end - beg).days + 1
+            except Exception:
+                window_days = 30
+            max_pages = min(3 if window_days <= 3 else MAX_PAGES_SAFETY_CAP, MAX_PAGES_SAFETY_CAP)
+
+            all_rows: list[dict] = []
+            rev = _generate_rev()
+            page = 1
+
+            client = await _make_client()
+            await _init_client(client)
+
+            try:
+                while page <= max_pages:
+                    # Пересоздаём клиент каждые REINIT_EVERY страниц
+                    if page > 1 and (page - 1) % REINIT_EVERY == 0:
+                        await client.aclose()
+                        print(
+                            f"[kazunion] reinitializing client at page={page}",
+                            flush=True,
+                        )
+                        client = await _make_client()
+                        await _init_client(client)
+                        rev = _generate_rev()
+
+                    result = None
+                    for attempt in range(2):
+                        result = await fetch_prices_page(
+                            client, self.base_url, params, page=page, rev=rev
+                        )
+                        if not result["error"]:
+                            break
+                        if attempt < 1:
+                            print(
+                                f"[kazunion] page={page} error='{result['error']}' "
+                                f"attempt={attempt+1}/2 — retrying in 2s",
+                                flush=True,
+                            )
+                            await _asyncio.sleep(2)
+                            rev = _generate_rev()
+
+                    if result["error"]:
+                        raise RuntimeError(
+                            f"SAMO response could not be parsed: {result['error']}"
+                        )
+                    if result["empty"] or not result["rows"]:
+                        break
+
+                    all_rows.extend(result["rows"])
+
+                    total_pages = result["pagination"]["total_pages"]
+                    if page >= total_pages:
+                        break
+
+                    page += 1
+            finally:
+                await client.aclose()
+
+            return all_rows
 
         try:
             return await asyncio.wait_for(_do_search(), timeout=120.0)
