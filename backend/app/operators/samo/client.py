@@ -184,6 +184,15 @@ async def fetch_all_prices(
         total_pages = result["pagination"]["total_pages"]
         if page >= total_pages:
             break
+
+        # Kazunion наблюдался зависающим стабильно после ~16 успешных
+        # страниц подряд (похоже на rate-limit по числу запросов в сессии).
+        # Небольшая пауза каждые 10 страниц даёт серверу "остыть".
+        if "kazunion" in base_url and page % 10 == 0:
+            import asyncio as _asyncio
+            print(f"[samo] {base_url} pausing 8s after page={page} to avoid rate limit", flush=True)
+            await _asyncio.sleep(8)
+
         page += 1
 
     return all_rows
