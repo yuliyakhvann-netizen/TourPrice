@@ -56,28 +56,46 @@ class KazunionOperator:
             filter_value=kazunion_config.FILTER_DEFAULT,
             partition_price=kazunion_config.PARTITION_PRICE_DEFAULT,
         )
-        async with httpx.AsyncClient(follow_redirects=True) as client:
-            # Инит-запрос 1: устанавливаем город вылета
-            await client.get(
-                f"{self.base_url}/search_tour",
-                params={"TOWNFROMINC": kazunion_config.TOWN_FROM_ALMATY},
-                timeout=httpx.Timeout(15.0, connect=5.0),
+        # Kazunion наблюдался зависающим на сетевом уровне посреди пагинации
+        # (соединение не закрывается, дефолтный httpx timeout=60s на отдельный
+        # запрос почему-то не срабатывает). Используем явный более строгий
+        # таймаут на КАЖДЫЙ HTTP-запрос плюс общий лимит на весь сбор страны,
+        # чтобы зависание никогда не съедало больше пары минут.
+        kazunion_timeout = httpx.Timeout(20.0, connect=10.0)
+
+        import asyncio
+        import datetime as dt
+
+        async def _do_search() -> list[dict]:
+            async with httpx.AsyncClient(follow_redirects=True, timeout=kazunion_timeout) as client:
+                # Инит-запрос 1: устанавливаем город вылета
+                await client.get(
+                    f"{self.base_url}/search_tour",
+                    params={"TOWNFROMINC": kazunion_config.TOWN_FROM_ALMATY},
+                )
+                # Инит-запрос 2: устанавливаем страну назначения
+                await client.get(
+                    f"{self.base_url}/search_tour",
+                    params={
+                        "TOWNFROMINC": kazunion_config.TOWN_FROM_ALMATY,
+                        "STATEINC": state_inc,
+                    },
+                )
+                try:
+                    beg = dt.datetime.strptime(checkin_beg, "%Y%m%d").date()
+                    end = dt.datetime.strptime(checkin_end, "%Y%m%d").date()
+                    window_days = (end - beg).days + 1
+                except Exception:
+                    window_days = 30
+                max_pages = 3 if window_days <= 3 else 30
+                return await fetch_all_prices(client, self.base_url, params, max_pages=max_pages)
+
+        try:
+            return await asyncio.wait_for(_do_search(), timeout=120.0)
+        except asyncio.TimeoutError:
+            print(
+                f"[kazunion] search timed out after 120s "
+                f"(state_inc={state_inc}, {checkin_beg}..{checkin_end}) — likely network hang",
+                flush=True,
             )
-            # Инит-запрос 2: устанавливаем страну назначения
-            await client.get(
-                f"{self.base_url}/search_tour",
-                params={
-                    "TOWNFROMINC": kazunion_config.TOWN_FROM_ALMATY,
-                    "STATEINC": state_inc,
-                },
-                timeout=httpx.Timeout(15.0, connect=5.0),
-            )
-            import datetime as dt
-            try:
-                beg = dt.datetime.strptime(checkin_beg, "%Y%m%d").date()
-                end = dt.datetime.strptime(checkin_end, "%Y%m%d").date()
-                window_days = (end - beg).days + 1
-            except Exception:
-                window_days = 30
-            max_pages = 3 if window_days <= 3 else 30
-            return await fetch_all_prices(client, self.base_url, params, max_pages=max_pages)
+            return []
