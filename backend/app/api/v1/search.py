@@ -505,24 +505,35 @@ async def _run_operator_search(
                 )
                 return None
 
-            all_rows: list[dict] = []
-            for resort_id in pegas_resort_ids:
-                try:
-                    resort_rows = await asyncio.wait_for(
-                        _search_pegas_with_child_ages(
-                            connector=connector,
-                            db=db,
-                            op_id=op_id,
-                            resort_id=resort_id,
-                            destination_country_id=int(state_raw),
-                            body=body,
-                            child_ages=pegas_child_ages,
-                        ),
-                        timeout=OPERATOR_SEARCH_TIMEOUT,
-                    )
-                    all_rows.extend(resort_rows)
-                except Exception as e:
-                    print(f"[dual_search] pegas resort_id={resort_id} FAILED: {e}", flush=True)
+            # Параллелим resort'ы с небольшим лимитом — Pegas может банить
+            # IP при слишком высокой частоте/параллельности запросов, поэтому
+            # лимит начинаем с малого (2) и поднимаем только после проверки
+            # что банов не происходит.
+            pegas_semaphore = asyncio.Semaphore(2)
+
+            async def _fetch_one_resort(resort_id: int) -> list[dict]:
+                async with pegas_semaphore:
+                    try:
+                        return await asyncio.wait_for(
+                            _search_pegas_with_child_ages(
+                                connector=connector,
+                                db=db,
+                                op_id=op_id,
+                                resort_id=resort_id,
+                                destination_country_id=int(state_raw),
+                                body=body,
+                                child_ages=pegas_child_ages,
+                            ),
+                            timeout=OPERATOR_SEARCH_TIMEOUT,
+                        )
+                    except Exception as e:
+                        print(f"[dual_search] pegas resort_id={resort_id} FAILED: {e}", flush=True)
+                        return []
+
+            resort_results = await asyncio.gather(
+                *[_fetch_one_resort(rid) for rid in pegas_resort_ids]
+            )
+            all_rows: list[dict] = [row for rows_list in resort_results for row in rows_list]
 
             rows = all_rows
         else:
