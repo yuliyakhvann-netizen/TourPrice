@@ -55,6 +55,22 @@ router = APIRouter(prefix="/search", tags=["search"])
 CACHE_FRESHNESS_HOURS = 6
 PEGAS_DEFAULT_DEPARTURE_LOCATION_ID = 553  # Алматы — fallback если город не найден в БД
 
+# Защита от дублирующих фоновых сборов: пока идёт сбор по (страна, даты),
+# повторные запросы с теми же параметрами не ставят вторую фоновую задачу.
+_active_background_refreshes: set[str] = set()
+
+
+def _refresh_key(country: str, checkin_beg, checkin_end) -> str:
+    return f"{country}|{checkin_beg}|{checkin_end}"
+
+
+async def _run_country_refresh_tracked(*, country: str, checkin_beg, checkin_end, **kwargs) -> None:
+    key = _refresh_key(country, checkin_beg, checkin_end)
+    try:
+        await _run_country_refresh(country=country, checkin_beg=checkin_beg, checkin_end=checkin_end, **kwargs)
+    finally:
+        _active_background_refreshes.discard(key)
+
 
 def _date_range(start: date, end: date) -> list[str]:
     """Список ISO-дат от start до end включительно."""
@@ -345,17 +361,20 @@ async def dual_search(
     # Если кэш совсем пуст — запускаем фоновый сбор за пределами HTTP-запроса,
     # чтобы Railway/Vercel прокси не убили соединение по таймауту.
     if not run_ids_no_child and not run_ids_with_child:
-        background_tasks.add_task(
-            _run_country_refresh,
-            country=body.country,
-            departure_city=body.departure_city,
-            checkin_beg=body.checkin_beg,
-            checkin_end=body.checkin_end,
-            nights_from=body.nights_from,
-            nights_till=body.nights_till,
-            adults=body.adults,
-            child_age=body.child_age,
-        )
+        key = _refresh_key(body.country, body.checkin_beg, body.checkin_end)
+        if key not in _active_background_refreshes:
+            _active_background_refreshes.add(key)
+            background_tasks.add_task(
+                _run_country_refresh_tracked,
+                country=body.country,
+                departure_city=body.departure_city,
+                checkin_beg=body.checkin_beg,
+                checkin_end=body.checkin_end,
+                nights_from=body.nights_from,
+                nights_till=body.nights_till,
+                adults=body.adults,
+                child_age=body.child_age,
+            )
 
     # Для op_code_map нужны ВСЕ операторы, не только активные
     all_operators_result = await db.execute(select(Operator.id, Operator.code))
