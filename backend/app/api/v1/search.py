@@ -429,7 +429,11 @@ async def _run_operator_search(
     profile,
     city_repo: CityMappingRepository,
     country_repo: CountryMappingRepository,
-    normalization_service: NormalizationService,
+    normalization_service: NormalizationService | None = None,  # больше не используется для записи,
+    # сохранён параметром для обратной совместимости с dual_search (который
+    # по-прежнему передаёт свой normalization_service — там cache_only=True
+    # путь его тоже не использует, а не-cache_only путь теперь берёт свежую
+    # сессию сам, см. ниже)
     cache_only: bool = False,
 ) -> str | None:
     """
@@ -574,28 +578,22 @@ async def _run_operator_search(
         print(f"[dual_search] operator={op_code} children={body.children} FAILED: {exc}", flush=True)
         return None
 
-    # Сбор данных (HTTP) завершён. Сессия db, полученная функцией на входе,
-    # к этому моменту могла простаивать десятки секунд (Kazunion: ~80с на
-    # 3 чанка дат) — если она протухла на уровне пулера, ingest здесь же
-    # упадёт с "connection is closed". Поэтому проверяем состояние сессии
-    # и при необходимости открываем новую прямо перед записью.
-    try:
-        raw_result, normalized_tours = await normalization_service.ingest_search_results(
+    # Сбор данных (HTTP) завершён. Сессия db/normalization_service, переданная
+    # в функцию, была открыта ДО начала HTTP-сбора (city_repo/country_repo
+    # читались через неё в начале функции) и могла провисеть открытой
+    # десятки-сотни секунд без единого запроса — Railway/asyncpg рвёт такие
+    # "молчащие" соединения. Поэтому запись результата ВСЕГДА идёт через
+    # свежую, отдельно открытую сессию, а не через возможно-протухшую db —
+    # никакого retry на той же сессии, никакого return raw_result.scrape_run_id
+    # из except-блока, который может сам не выполниться и оставить исходную
+    # db в состоянии "transaction rolled back" для внешнего op_db.commit().
+    from app.database import AsyncSessionLocal
+    async with AsyncSessionLocal() as ingest_db:
+        ingest_normalization_service = NormalizationService(ingest_db)
+        raw_result, normalized_tours = await ingest_normalization_service.ingest_search_results(
             operator_id=op_id, profile_id=profile.id, rows=rows, operator_code=op_code
         )
-    except Exception as exc:
-        logger.error(
-            "[dual_search] op=%s children=%s ingest FAILED on possibly-stale session: %s "
-            "— retrying with a fresh session",
-            op_code, body.children, exc,
-        )
-        from app.database import AsyncSessionLocal
-        async with AsyncSessionLocal() as fresh_db:
-            fresh_normalization_service = NormalizationService(fresh_db)
-            raw_result, normalized_tours = await fresh_normalization_service.ingest_search_results(
-                operator_id=op_id, profile_id=profile.id, rows=rows, operator_code=op_code
-            )
-            await fresh_db.commit()
+        await ingest_db.commit()
     print(
         f"[dual_search] operator={op_code} children={body.children} "
         f"fetched={len(rows)} normalized={len(normalized_tours)}",
@@ -989,7 +987,9 @@ async def _run_country_refresh(
             async with AsyncSessionLocal() as op_db:
                 city_repo = CityMappingRepository(op_db)
                 country_repo = CountryMappingRepository(op_db)
-                normalization_service = NormalizationService(op_db)
+                # normalization_service на op_db больше не передаётся —
+                # _run_operator_search теперь открывает свою собственную
+                # свежую сессию непосредственно перед ingest, см. правку там.
                 prof = await op_db.get(SearchProfile, profile_id)
 
                 await asyncio.wait_for(
@@ -1002,11 +1002,14 @@ async def _run_country_refresh(
                         profile=prof,
                         city_repo=city_repo,
                         country_repo=country_repo,
-                        normalization_service=normalization_service,
+                        normalization_service=None,  # больше не используется внутри, см. правку
                     ),
                     timeout=OPERATOR_TOTAL_TIMEOUT,
                 )
-                await op_db.commit()
+                # op_db.commit() больше не нужен: op_db использовалась только
+                # для чтения city_repo/country_repo/prof в начале, запись
+                # результата теперь идёт через отдельную ingest_db внутри
+                # _run_operator_search и коммитится там же.
         except asyncio.TimeoutError:
             logger.error("[country_refresh] op=%s country=%s TOTAL TIMEOUT after %ds", op_code, country, OPERATOR_TOTAL_TIMEOUT)
         except Exception as e:
