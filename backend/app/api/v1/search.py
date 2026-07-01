@@ -512,20 +512,25 @@ async def _run_operator_search(
             pegas_semaphore = asyncio.Semaphore(2)
 
             async def _fetch_one_resort(resort_id: int) -> list[dict]:
+                from app.database import AsyncSessionLocal
+
                 async with pegas_semaphore:
                     try:
-                        return await asyncio.wait_for(
-                            _search_pegas_with_child_ages(
-                                connector=connector,
-                                db=db,
-                                op_id=op_id,
-                                resort_id=resort_id,
-                                destination_country_id=int(state_raw),
-                                body=body,
-                                child_ages=pegas_child_ages,
-                            ),
-                            timeout=OPERATOR_SEARCH_TIMEOUT,
-                        )
+                        async with AsyncSessionLocal() as resort_db:
+                            result = await asyncio.wait_for(
+                                _search_pegas_with_child_ages(
+                                    connector=connector,
+                                    db=resort_db,
+                                    op_id=op_id,
+                                    resort_id=resort_id,
+                                    destination_country_id=int(state_raw),
+                                    body=body,
+                                    child_ages=pegas_child_ages,
+                                ),
+                                timeout=OPERATOR_SEARCH_TIMEOUT,
+                            )
+                            await resort_db.commit()
+                            return result
                     except Exception as e:
                         print(f"[dual_search] pegas resort_id={resort_id} FAILED: {e}", flush=True)
                         return []
