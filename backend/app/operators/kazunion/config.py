@@ -14,6 +14,10 @@ CURRENCY_KZT = 4       # 4 = KZT у Kazunion (2=USD, 3=EUR, 4=KZT)
 FILTER_DEFAULT = 0
 PARTITION_PRICE_DEFAULT = 232  # confirmed via DevTools
 
+# Kazunion зависает на пагинации, если в одном запросе >~16 страниц.
+# Чанкинг диапазона дат по 14 дней держит число страниц на чанк < 15.
+MAX_DATE_WINDOW_DAYS = 14
+
 # Все страны из HTML <select name="STATEINC"> (samo_id → название)
 COUNTRIES = {
     48: "Азербайджан",
