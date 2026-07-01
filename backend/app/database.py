@@ -12,6 +12,13 @@ engine = create_async_engine(
     pool_size=20,
     max_overflow=20,
     pool_timeout=15,
+    # Соединения, "убитые" на середине COMMIT из-за asyncio.wait_for
+    # cancellation, зависают в состоянии idle/ClientRead на стороне
+    # Postgres на часы, съедая слоты пула (pool_size+max_overflow=40).
+    # pool_recycle заставляет SQLAlchemy принудительно закрывать и
+    # пересоздавать любое соединение старше 300с — даже "работающее" —
+    # так зомби физически не могут копиться дольше 5 минут.
+    pool_recycle=300,
 )
 
 AsyncSessionLocal = async_sessionmaker(
