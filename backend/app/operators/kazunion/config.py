@@ -11,7 +11,7 @@ OPERATOR_CODE = "kazunion"
 
 TOWN_FROM_ALMATY = 57  # confirmed via HTML option value
 CURRENCY_KZT = 4       # 4 = KZT у Kazunion (2=USD, 3=EUR, 4=KZT)
-FILTER_DEFAULT = 1
+FILTER_DEFAULT = 0
 PARTITION_PRICE_DEFAULT = 232  # confirmed via DevTools
 
 # Все страны из HTML <select name="STATEINC"> (samo_id → название)
