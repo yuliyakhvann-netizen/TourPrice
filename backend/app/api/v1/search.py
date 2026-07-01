@@ -544,6 +544,12 @@ async def _run_operator_search(
         else:
             samo_child_ages = [child_age] if child_age is not None and body.children > 0 else []
 
+            # db НЕ передаём в SAMO-коннекторы: они не используют сессию во
+            # время сбора (только для Pegas нужны куки из БД), а держать
+            # AsyncSession открытой на всё время HTTP-сбора (может занимать
+            # десятки секунд — Kazunion до ~80с на 3 чанка) рискует тем, что
+            # PgBouncer/пулер Railway оборвёт "простаивающее" соединение
+            # снизу раньше, чем Python успеет закоммитить результат.
             coro = connector.search(
                 town_from_inc=int(town_from_raw),
                 state_inc=int(state_raw),
@@ -554,7 +560,6 @@ async def _run_operator_search(
                 adults=body.adults,
                 children=body.children,
                 child_ages=samo_child_ages,
-                db=db,
             )
             rows = await asyncio.wait_for(coro, timeout=OPERATOR_SEARCH_TIMEOUT)
 
@@ -569,9 +574,28 @@ async def _run_operator_search(
         print(f"[dual_search] operator={op_code} children={body.children} FAILED: {exc}", flush=True)
         return None
 
-    raw_result, normalized_tours = await normalization_service.ingest_search_results(
-        operator_id=op_id, profile_id=profile.id, rows=rows, operator_code=op_code
-    )
+    # Сбор данных (HTTP) завершён. Сессия db, полученная функцией на входе,
+    # к этому моменту могла простаивать десятки секунд (Kazunion: ~80с на
+    # 3 чанка дат) — если она протухла на уровне пулера, ingest здесь же
+    # упадёт с "connection is closed". Поэтому проверяем состояние сессии
+    # и при необходимости открываем новую прямо перед записью.
+    try:
+        raw_result, normalized_tours = await normalization_service.ingest_search_results(
+            operator_id=op_id, profile_id=profile.id, rows=rows, operator_code=op_code
+        )
+    except Exception as exc:
+        logger.error(
+            "[dual_search] op=%s children=%s ingest FAILED on possibly-stale session: %s "
+            "— retrying with a fresh session",
+            op_code, body.children, exc,
+        )
+        from app.database import AsyncSessionLocal
+        async with AsyncSessionLocal() as fresh_db:
+            fresh_normalization_service = NormalizationService(fresh_db)
+            raw_result, normalized_tours = await fresh_normalization_service.ingest_search_results(
+                operator_id=op_id, profile_id=profile.id, rows=rows, operator_code=op_code
+            )
+            await fresh_db.commit()
     print(
         f"[dual_search] operator={op_code} children={body.children} "
         f"fetched={len(rows)} normalized={len(normalized_tours)}",
@@ -952,6 +976,14 @@ async def _run_country_refresh(
         сессии после asyncio.wait_for timeout ломает SQLAlchemy's async
         greenlet context, поэтому единственный безопасный способ — новая
         сессия каждый раз.
+
+        Сессия открывается ЗДЕСЬ (снаружи _run_operator_search тоже нужна для
+        city_repo/country_repo/normalization_service), но сам HTTP-сбор внутри
+        _run_operator_search теперь НЕ держит db все время сбора для SAMO-
+        операторов — см. правку в _run_operator_search. Это ограничивает
+        риск "connection is closed" только чтением city_repo/country_repo
+        в начале (быстро) и финальным ingest (тоже быстро), а не всем
+        временем HTTP-запросов (у Kazunion — до ~80-120с).
         """
         try:
             async with AsyncSessionLocal() as op_db:
