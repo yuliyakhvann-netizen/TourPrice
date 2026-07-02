@@ -983,37 +983,50 @@ async def _run_country_refresh(
         в начале (быстро) и финальным ingest (тоже быстро), а не всем
         временем HTTP-запросов (у Kazunion — до ~80-120с).
         """
+        # AsyncSessionLocal НЕ используется как context manager здесь: если
+        # asyncio.wait_for отменяет _run_operator_search посреди HTTP-запроса,
+        # который держал op_db (например Pegas читает куки через db=op_db),
+        # соединение обрывается "грязно". `async with` при выходе всё равно
+        # пытается сделать rollback() на уже мёртвом соединении и кидает
+        # "cannot call Transaction.rollback(): the underlying connection is
+        # closed" — это исключение перекрывает настоящий TimeoutError и прячет
+        # реальную причину. Поэтому сессию открываем/закрываем вручную и
+        # закрытие оборачиваем в свой try/except.
+        op_db = AsyncSessionLocal()
         try:
-            async with AsyncSessionLocal() as op_db:
-                city_repo = CityMappingRepository(op_db)
-                country_repo = CountryMappingRepository(op_db)
-                # normalization_service на op_db больше не передаётся —
-                # _run_operator_search теперь открывает свою собственную
-                # свежую сессию непосредственно перед ingest, см. правку там.
-                prof = await op_db.get(SearchProfile, profile_id)
+            city_repo = CityMappingRepository(op_db)
+            country_repo = CountryMappingRepository(op_db)
+            prof = await op_db.get(SearchProfile, profile_id)
 
-                await asyncio.wait_for(
-                    _run_operator_search(
-                        db=op_db,
-                        op_id=op_id,
-                        op_code=op_code,
-                        body=body,
-                        child_age=child_age if body.children > 0 else None,
-                        profile=prof,
-                        city_repo=city_repo,
-                        country_repo=country_repo,
-                        normalization_service=None,  # больше не используется внутри, см. правку
-                    ),
-                    timeout=OPERATOR_TOTAL_TIMEOUT,
-                )
-                # op_db.commit() больше не нужен: op_db использовалась только
-                # для чтения city_repo/country_repo/prof в начале, запись
-                # результата теперь идёт через отдельную ingest_db внутри
-                # _run_operator_search и коммитится там же.
+            await asyncio.wait_for(
+                _run_operator_search(
+                    db=op_db,
+                    op_id=op_id,
+                    op_code=op_code,
+                    body=body,
+                    child_age=child_age if body.children > 0 else None,
+                    profile=prof,
+                    city_repo=city_repo,
+                    country_repo=country_repo,
+                    normalization_service=None,  # ingest теперь всегда через свежую сессию, см. _run_operator_search
+                ),
+                timeout=OPERATOR_TOTAL_TIMEOUT,
+            )
+            # commit() не нужен: op_db использовалась только для чтения
+            # city_repo/country_repo/prof, запись идёт через отдельную
+            # ingest_db внутри _run_operator_search и коммитится там же.
         except asyncio.TimeoutError:
             logger.error("[country_refresh] op=%s country=%s TOTAL TIMEOUT after %ds", op_code, country, OPERATOR_TOTAL_TIMEOUT)
         except Exception as e:
             logger.error("[country_refresh] op=%s country=%s FAILED: %s", op_code, country, e)
+        finally:
+            try:
+                await op_db.close()
+            except Exception:
+                # Соединение уже мертво (оборвано при cancellation) —
+                # закрытие мёртвого соединения не несёт полезной информации
+                # и не должно перекрывать реальную ошибку/таймаут выше.
+                pass
 
     async def run_one_operator(op_id: int, op_code: str) -> None:
         await run_one_body(op_id, op_code, body_no_child, profile_no_child_id)
